@@ -1,0 +1,7 @@
+model:
+  type: random_forest
+  path: models/latest.pkl
+data:
+  path: data/telco_churn.csv
+monitoring:
+  drift_threshold: 0.2

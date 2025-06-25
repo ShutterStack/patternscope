@@ -1,0 +1,61 @@
+image: python:3.10
+
+stages:
+  - test
+  - train
+  - evaluate
+  - check
+  - deploy
+
+variables:
+  THRESHOLD_F1: "0.85"
+
+before_script:
+  - pip install -r requirements.txt
+
+test:
+  stage: test
+  script:
+    - echo "✅ Running basic syntax checks..."
+    - python -m py_compile src/*.py
+
+train:
+  stage: train
+  script:
+    - echo "🚀 Training model..."
+    - python src/train.py
+
+evaluate:
+  stage: evaluate
+  script:
+    - echo "📊 Evaluating model..."
+    - python src/evaluate.py
+
+check:
+  stage: check
+  script:
+    - |
+      echo "🔍 Checking F1 threshold..."
+      F1=$(cat logs/metrics.json | grep '"f1-score":' | head -n1 | awk '{print $2}' | tr -d ',')
+      echo "F1-score: $F1"
+      if [ $(echo "$F1 < $THRESHOLD_F1" | bc) -eq 1 ]; then
+        echo "❌ F1 below threshold! Failing pipeline."
+        exit 1
+      else
+        echo "✅ F1 above threshold."
+      fi
+
+deploy:
+  stage: deploy
+  image: docker:latest
+  services:
+    - docker:dind
+  before_script: []
+  script:
+    - echo "🐳 Building and pushing image..."
+    - export PROJECT_NAMESPACE_LOWER=$(echo "$CI_PROJECT_NAMESPACE" | tr '[:upper:]' '[:lower:]')
+    - export PROJECT_NAME_LOWER=$(echo "$CI_PROJECT_NAME" | tr '[:upper:]' '[:lower:]')
+    - docker login -u gitlab-ci-token -p $CI_JOB_TOKEN registry.gitlab.com
+    - docker build -t registry.gitlab.com/$PROJECT_NAMESPACE_LOWER/$PROJECT_NAME_LOWER:latest .
+    - docker push registry.gitlab.com/$PROJECT_NAMESPACE_LOWER/$PROJECT_NAME_LOWER:latest
+
